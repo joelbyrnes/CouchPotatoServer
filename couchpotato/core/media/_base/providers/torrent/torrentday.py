@@ -1,4 +1,5 @@
 import re
+import traceback
 from couchpotato.core.helpers.variable import tryInt
 from couchpotato.core.logger import CPLog
 from couchpotato.core.media._base.providers.torrent.base import TorrentProvider
@@ -19,6 +20,11 @@ class Base(TorrentProvider):
 
     http_time_between_calls = 1  # Seconds
 
+    def __headers(self):
+        if self.conf('cookie', default=None):
+            return dict(cookie=self.conf('cookie'))
+        return {}
+
     def _searchOnTitle(self, title, media, quality, results):
 
         query = '"%s" %s' % (title, media['info']['year'])
@@ -31,7 +37,7 @@ class Base(TorrentProvider):
             'search': query,
         }
 
-        data = self.getJsonData(self.urls['search'], data = data)
+        data = self.getJsonData(self.urls['search'], data = data, headers=self.__headers())
         try: torrents = data.get('Fs', [])[0].get('Cn', {}).get('torrents', [])
         except: return
 
@@ -56,6 +62,10 @@ class Base(TorrentProvider):
         }
 
     def loginSuccess(self, output):
+        notfound = re.search('User not found', output)
+        if notfound:
+            raise Exception(notfound.group(0).strip())
+
         often = re.search('You tried too often, please wait .*</div>', output)
         if often:
             raise Exception(often.group(0)[:-6].strip())
@@ -65,6 +75,17 @@ class Base(TorrentProvider):
     def loginCheckSuccess(self, output):
         return 'logout.php' in output.lower()
 
+    def loginDownload(self, url = '', nzb_id = ''):
+        try:
+            # login not required when using cookie header
+            if self.__headers():
+                return self.urlopen(url, headers=self.__headers())
+
+            if not self.login():
+                log.error('Failed downloading from %s', self.getName())
+            return self.urlopen(url)
+        except:
+            log.error('Failed downloading from %s: %s', (self.getName(), traceback.format_exc()))
 
 config = [{
     'name': 'torrentday',
@@ -90,6 +111,11 @@ config = [{
                     'name': 'password',
                     'default': '',
                     'type': 'password',
+                },
+                {
+                    'name': 'cookie',
+                    'default': '',
+                    'description': 'Until TorrentDay fixes its captcha. Should look like "uid=1012345; pass=286755fad04869ca523320acce0dc6a4"',
                 },
                 {
                     'name': 'seed_ratio',
