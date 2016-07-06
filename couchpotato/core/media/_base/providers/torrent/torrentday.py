@@ -1,5 +1,6 @@
 import re
 import traceback
+import time
 from couchpotato.core.helpers.variable import tryInt
 from couchpotato.core.logger import CPLog
 from couchpotato.core.media._base.providers.torrent.base import TorrentProvider
@@ -52,6 +53,33 @@ class Base(TorrentProvider):
                 'leechers': tryInt(torrent.get('leech')),
             })
 
+    def login(self):
+        # login not required when using cookie header
+        if not self.__headers():
+            return super(Base, self).login()
+
+        # Check if the cookie is still valid every hour; keep it alive
+        now = time.time()
+        if not self.last_login_check or (self.last_login_check and self.last_login_check < (now - 3600)):
+            try:
+                output = self.urlopen(self.urls['login_check'], headers=self.__headers())
+                if self.loginCheckSuccess(output):
+                    self.last_login_check = now
+                    return True
+            except: pass
+            self.last_login_check = None
+            self.login_failures += 1
+            if self.login_failures >= 3:
+                self.disableAccount()
+
+        if self.last_login_check:
+            return True
+
+        # no point trying to login if using cookie
+
+        log.error('Failed to use cookie to access %s', (self.getName()))
+        return False
+
     def getLoginParams(self):
         return {
             'username': self.conf('username'),
@@ -76,16 +104,14 @@ class Base(TorrentProvider):
         return 'logout.php' in output.lower()
 
     def loginDownload(self, url = '', nzb_id = ''):
-        try:
-            # login not required when using cookie header
-            if self.__headers():
+        # login not required when using cookie header
+        if not self.__headers():
+            return super(Base, self).loginDownload()
+        else:
+            try:
                 return self.urlopen(url, headers=self.__headers())
-
-            if not self.login():
-                log.error('Failed downloading from %s', self.getName())
-            return self.urlopen(url)
-        except:
-            log.error('Failed downloading from %s: %s', (self.getName(), traceback.format_exc()))
+            except:
+                log.error('Failed downloading from %s: %s', (self.getName(), traceback.format_exc()))
 
 config = [{
     'name': 'torrentday',
