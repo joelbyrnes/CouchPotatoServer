@@ -106,7 +106,7 @@ class Base(TorrentProvider):
     def loginDownload(self, url = '', nzb_id = ''):
         # login not required when using cookie header
         if not self.__headers():
-            return super(Base, self).loginDownload()
+            return super(Base, self).loginDownload(url, nzb_id)
         else:
             try:
                 return self.urlopen(url, headers=self.__headers())
@@ -141,7 +141,7 @@ config = [{
                 {
                     'name': 'cookie',
                     'default': '',
-                    'description': 'Until TorrentDay fixes its captcha. Should look like "uid=1012345; pass=286755fad04869ca523320acce0dc6a4"',
+                    'description': 'Until TorrentDay fixes its captcha. Should look like "uid=1012345; pass=286755fad04869ca523320acce0dc6a4". Ignores username and password if this is set.',
                 },
                 {
                     'name': 'seed_ratio',
